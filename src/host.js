@@ -166,12 +166,15 @@ async function understand(bottom, surface, keyPoints, message, analysis) {
 async function judgeQuestion(bottom, surface, keyPoints, question, analysis) {
   const r = await understand(bottom, surface, keyPoints, question, analysis);
   if (r && r.type === 'question') {
+    const touchedRaw = (Array.isArray(r.touched) ? r.touched : [])
+      .map((i) => parseInt(i, 10) - 1)
+      .filter((i) => i >= 0 && i < keyPoints.length);
+    const verdict = r.verdict || '无关';
+    const metaVerdict = verdict === '红汤' || verdict === '清汤';
+    const touched = metaVerdict || r.important === false ? [] : touchedRaw.slice(0, 3);
     return {
-      verdict: r.verdict || '无关',
-      touched: (Array.isArray(r.touched) ? r.touched : [])
-        .map((i) => parseInt(i, 10) - 1)
-        .filter((i) => i >= 0 && i < keyPoints.length)
-        .slice(0, 3),
+      verdict,
+      touched,
       guide: r.guide || '',
       important: r.important !== false,
     };

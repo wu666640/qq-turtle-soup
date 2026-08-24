@@ -302,10 +302,12 @@ async function doMessage(s, key, message) {
 
   // —— 问题 ——
   const verdict = (r && r.verdict) || '无关';
-  const touched = (Array.isArray(r && r.touched) ? r.touched : [])
+  const touchedRaw = (Array.isArray(r && r.touched) ? r.touched : [])
     .map((i) => parseInt(i, 10) - 1)
-    .filter((i) => i >= 0 && i < s.keyPoints.length)
-    .slice(0, 3);
+    .filter((i) => i >= 0 && i < s.keyPoints.length);
+  // 非关键问题 / 元问题（清汤红汤）一律不点亮关键点
+  const metaVerdict = verdict === '红汤' || verdict === '清汤';
+  const touched = metaVerdict || (r && r.important === false) ? [] : touchedRaw.slice(0, 3);
   const guide = (r && r.guide) || '';
   // 能回答但没问到破案关键 → 回答后补一句「不是重点」（仅对 是/不是；无关本身已说明不重要）
   const notKey =
