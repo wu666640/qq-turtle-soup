@@ -116,6 +116,7 @@ function newSession() {
     remaining: config.maxQuestions,
     setupBuffer: { text: '' },
     pendingDelete: null,
+    caseAnalysis: null,
   };
 }
 
@@ -198,7 +199,7 @@ function helpText() {
   );
 }
 
-async function startGame(s, key, surface, bottom, title = '', ownerId = '') {
+async function startGame(s, key, surface, bottom, title = '', ownerId = '', analysis = null) {
   s.surface = surface;
   s.bottom = bottom;
   s.phase = 'playing';
@@ -206,6 +207,7 @@ async function startGame(s, key, surface, bottom, title = '', ownerId = '') {
   s.hints = [];
   s.remaining = config.maxQuestions;
   s.keyPoints = [];
+  s.caseAnalysis = analysis;
   let difficulty = 3;
   try {
     const points = await host.extractKeyPoints(bottom);
@@ -215,15 +217,31 @@ async function startGame(s, key, surface, bottom, title = '', ownerId = '') {
     console.error('[bot] 提取关键点失败:', e.message);
     s.keyPoints = [{ t: '（关键点提取失败，还原度按有效触及估算）', state: 'untouched' }];
   }
+  // 汤底理解笔记（开局生成一次，全程判答用；已有则复用）
+  if (!s.caseAnalysis) {
+    try {
+      s.caseAnalysis = await host.analyzeCase(surface, bottom);
+    } catch (e) {
+      console.error('[bot] 汤底理解笔记生成失败:', e.message);
+      s.caseAnalysis = null;
+    }
+  }
   // 提问次数 = 按关键点数 + 难度 + 篇幅动态计算（15~50）
   const pts = s.keyPoints.length;
   const totalLen = (surface + bottom).length;
   const lenBonus = totalLen >= 1000 ? 6 : totalLen >= 500 ? 3 : 0;
   const diffBonus = Math.round((difficulty - 1) * 2.5);
   s.remaining = Math.max(15, Math.min(50, 12 + pts * 2 + diffBonus + lenBonus));
+  const notesLine = s.caseAnalysis
+    ? `\n【汤底理解笔记】${s.caseAnalysis.summary || ''}${
+        Array.isArray(s.caseAnalysis.pitfalls) && s.caseAnalysis.pitfalls.length
+          ? '\n易混淆点：' + s.caseAnalysis.pitfalls.map((p) => `「${p.ask}」→${p.answer}`).join('；')
+          : ''
+      }`
+    : '';
   appendRecord(
     key,
-    `【开局】${title || '自出题'}\n汤面：${surface}\n（汤底已封存，共 ${s.keyPoints.length} 个关键点，难度 ${difficulty} 星，提问 ${s.remaining} 次）`
+    `【开局】${title || '自出题'}\n汤面：${surface}\n（汤底已封存，共 ${s.keyPoints.length} 个关键点，难度 ${difficulty} 星，提问 ${s.remaining} 次）${notesLine}`
   );
   const head = title ? `📚 ${title}\n\n` : '';
   let savedNote = '';
@@ -235,7 +253,7 @@ async function startGame(s, key, surface, bottom, title = '', ownerId = '') {
       savedNote = `（题库里已有此题《${dup.title}》，未重复保存）`;
     } else {
       const autoTitle = (surface.trim().split('\n')[0].trim().slice(0, 15)) || '未命名';
-      saved.push({ id: saved.length + 1, title: autoTitle, surface, bottom, owner: ownerId || 'auto' });
+      saved.push({ id: saved.length + 1, title: autoTitle, surface, bottom, owner: ownerId || 'auto', caseAnalysis: s.caseAnalysis || null });
       persistSaved(saved);
       savedNote = `（已自动存入「我的题」《${autoTitle}》，可随时重玩）`;
     }
@@ -253,7 +271,7 @@ async function startGame(s, key, surface, bottom, title = '', ownerId = '') {
 async function doMessage(s, key, message) {
   let r;
   try {
-    r = await host.understand(s.bottom, s.surface, s.keyPoints.map((p) => p.t), message);
+    r = await host.understand(s.bottom, s.surface, s.keyPoints.map((p) => p.t), message, s.caseAnalysis);
   } catch (e) {
     return `⚠️ 理解失败（${e.message}），这一问不计数，请重试。`;
   }
@@ -398,7 +416,7 @@ async function route(msg, text) {
   if (lower === '随机一题' || lower === '来一题' || lower === '随机题' || lower === '随便来一题') {
     const list = unifiedList();
     const pick = list[Math.floor(Math.random() * list.length)];
-    return startGame(s, key, pick.surface, pick.bottom, `题库 · ${pick.title}`, String(msg.user_id));
+    return startGame(s, key, pick.surface, pick.bottom, `题库 · ${pick.title}`, String(msg.user_id), pick.caseAnalysis || null);
   }
 
   // —— 存题（添加新题到统一题库）——
@@ -444,7 +462,7 @@ async function route(msg, text) {
     }
     const p = findUnified(arg);
     if (!p) return `题库里没有「${arg}」。发「题库」看列表。`;
-    return startGame(s, key, p.surface, p.bottom, `题库 · ${p.title}`, String(msg.user_id));
+    return startGame(s, key, p.surface, p.bottom, `题库 · ${p.title}`, String(msg.user_id), p.caseAnalysis || null);
   }
 
   // —— 删题（统一编号，内置题不可删）——

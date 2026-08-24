@@ -94,9 +94,42 @@ async function generateHint(bottom, keyPoints, untouchedIdx) {
   }
 }
 
+/** 开局：通读汤面/汤底，生成「理解笔记」（角色真实身份/伪装 + 易混淆点），供全程判答使用 */
+async function analyzeCase(surface, bottom) {
+  const content = await callDeepSeek(
+    [
+      { role: 'system', content: '你是海龟汤主持人，只输出合法 JSON。' },
+      {
+        role: 'user',
+        content:
+          '请仔细通读下面的海龟汤「汤面」和「汤底」，建立对剧情的完整准确理解，输出 JSON 笔记：\n' +
+          '{"summary":"一句话概括剧情","characters":[{"name":"角色名","identity":"真实身份与伪装/关系，如：上帝——真实超自然存在，伪装成经纪人和司机出现"}],"keyFacts":["核心事实3~6条"],"pitfalls":[{"ask":"玩家易误解的问题（要具体）","answer":"正确回答：是/不是/红汤/清汤","note":"为什么"}]}\n' +
+          '要求：把易混淆点尽量列全（角色真实身份 vs 伪装、是否真实存在、是人是神、谁杀了谁等），pitfalls 至少 3 条。\n\n' +
+          `【汤面】\n${surface}\n\n【汤底】\n${bottom}`,
+      },
+    ],
+    { json: true, temperature: 0.1 }
+  );
+  return safeParseJSON(content);
+}
+
 /** 智能理解玩家消息：判定是指令还是问题；问题附带判答（一次调用完成，省 token） */
-async function understand(bottom, surface, keyPoints, message) {
+async function understand(bottom, surface, keyPoints, message, analysis) {
   const kp = keyPoints.map((t, i) => `${i + 1}. ${t}`).join('\n');
+  const notes = analysis
+    ? '\n【主持人理解笔记】\n' +
+      (analysis.summary ? `概括：${analysis.summary}\n` : '') +
+      (Array.isArray(analysis.characters) && analysis.characters.length
+        ? '角色：' + analysis.characters.map((c) => `${c.name}——${c.identity || ''}`).join('；') + '\n'
+        : '') +
+      (Array.isArray(analysis.keyFacts) && analysis.keyFacts.length
+        ? '核心事实：' + analysis.keyFacts.join('；') + '\n'
+        : '') +
+      (Array.isArray(analysis.pitfalls) && analysis.pitfalls.length
+        ? '易混淆点（玩家问到对应问题时按此回答）：' +
+          analysis.pitfalls.map((p) => `「${p.ask}」→${p.answer}（${p.note || ''}）`).join('；')
+        : '')
+    : '';
   const content = await callDeepSeek(
     [
       { role: 'system', content: '你只输出合法 JSON。' },
@@ -104,7 +137,7 @@ async function understand(bottom, surface, keyPoints, message) {
         role: 'user',
         content:
           '你是海龟汤主持人。玩家发来一条消息，可能是【游戏指令】，也可能是【推理问题】。请先判断类型，再按规则处理。\n\n' +
-          `【汤面】\n${surface}\n\n【汤底】\n${bottom}\n\n【关键真相点】\n${kp}\n\n玩家消息：${message}\n\n` +
+          `【汤面】\n${surface}\n\n【汤底】\n${bottom}\n\n【关键真相点】\n${kp}\n${notes}\n\n玩家消息：${message}\n\n` +
           '【如果是指令】识别种类并输出：{"type":"command","command":"hint|review|reveal|records|status|restart|help"}\n' +
           '  hint=要提示/扶汤；review=要复盘；reveal=要揭晓/看答案/放弃/不想玩了；records=要看提问记录；status=看还原度/进度；restart=重开/换一题；help=规则/帮助。\n' +
           '【如果是问题】依据汤底判答并输出：{"type":"question","verdict":"是|不是|无关|模糊|红汤|清汤","touched":[该问题直接确认或否定的关键点编号，通常0~2个],"important":true|false,"guide":"仅模糊时填，10~25字引导玩家问具体"}\n' +
@@ -129,8 +162,8 @@ async function understand(bottom, surface, keyPoints, message) {
 }
 
 /** 提问判答（保持旧接口）：仅处理问题型消息 */
-async function judgeQuestion(bottom, surface, keyPoints, question) {
-  const r = await understand(bottom, surface, keyPoints, question);
+async function judgeQuestion(bottom, surface, keyPoints, question, analysis) {
+  const r = await understand(bottom, surface, keyPoints, question, analysis);
   if (r && r.type === 'question') {
     return {
       verdict: r.verdict || '无关',
@@ -165,4 +198,4 @@ async function reviewGuess(bottom, keyPoints, guess) {
   return safeParseJSON(content);
 }
 
-module.exports = { extractKeyPoints, judgeQuestion, understand, generateHint, reviewGuess };
+module.exports = { extractKeyPoints, analyzeCase, judgeQuestion, understand, generateHint, reviewGuess };

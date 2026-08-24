@@ -51,6 +51,20 @@ const server = http.createServer((req, res) => {
       });
     } else if (content.includes('扶汤')) {
       reply = '提示：想想他是怎么复明的。';
+    } else if (content.includes('pitfalls')) {
+      // 汤底理解笔记
+      reply = JSON.stringify({
+        summary: '他复明后为保住光明杀了哥嫂，司机就是上帝伪装的经纪人',
+        characters: [
+          { name: '他', identity: '主角，天生失明后复明' },
+          { name: '司机/经纪人', identity: '上帝伪装的角色' },
+        ],
+        keyFacts: ['司机是上帝', '眼药水用人血做成'],
+        pitfalls: [
+          { ask: '上帝是人扮的吗', answer: '不是', note: '上帝真实存在' },
+          { ask: '他是被杀的么', answer: '模糊', note: '指代不明' },
+        ],
+      });
     } else if (content.includes('关键真相点')) {
       reply = JSON.stringify({ key_points: ['他天生失明', '嫂子雇人把他扔进山里', '司机给他人血做的眼药水'] });
     } else {
