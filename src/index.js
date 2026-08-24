@@ -605,6 +605,8 @@ function reply(ws, msg, text) {
 
 let currentWs = null;
 let reconnectTimer = null;
+/** 每会话独立消息队列：一个群的慢消息不会阻塞其他群 */
+const chatQueues = new Map();
 const heartbeatTimer = setInterval(() => {
   // 客户端 API 无法主动 ping，仅记录连接状态
   if (currentWs) console.log(`[bot] 心跳检查: ${currentWs.readyState === 1 ? '在线' : '断开'}`);
@@ -615,7 +617,6 @@ function connect() {
   console.log(`[bot] 连接 OneBot WS: ${config.onebotWsUrl}`);
   const ws = new WebSocket(config.onebotWsUrl);
   currentWs = ws;
-  let queue = Promise.resolve();
 
   ws.addEventListener('open', () => {
     console.log('[bot] ✅ 已连接 NapCat，等待消息…');
@@ -631,23 +632,29 @@ function connect() {
     if (evt.post_type === 'message' && evt.message_type) {
       // 群聊 @ 过滤：配置开启时，群里没 @ 机器人就不理会（私聊不受影响）
       if (config.groupRequireAt && evt.message_type === 'group' && !isAtBot(evt)) return;
-      queue = queue
-        .then(async () => {
-          const text = extractText(evt);
-          const who = evt.message_type === 'group' ? `群${evt.group_id}` : `私聊${evt.user_id}`;
-          console.log(`[收到 ${who}] ${(text || '(仅@)').slice(0, 80)}`);
-          const out = await route(evt, text);
-          if (out) {
-            console.log(`[回复 ${who}] ${out.replace(/\n/g, ' ').slice(0, 80)}`);
-            reply(ws, evt, out);
-          }
-        })
-        .catch((e) => {
-          console.error('[bot] 处理消息出错:', e);
-          try {
-            reply(ws, evt, `⚠️ 出错了：${e.message}`);
-          } catch {}
-        });
+      const qkey = evt.message_type === 'group' ? `g:${evt.group_id}` : `p:${evt.user_id}`;
+      if (!chatQueues.has(qkey)) chatQueues.set(qkey, Promise.resolve());
+      chatQueues.set(
+        qkey,
+        chatQueues
+          .get(qkey)
+          .then(async () => {
+            const text = extractText(evt);
+            const who = evt.message_type === 'group' ? `群${evt.group_id}` : `私聊${evt.user_id}`;
+            console.log(`[收到 ${who}] ${(text || '(仅@)').slice(0, 80)}`);
+            const out = await route(evt, text);
+            if (out) {
+              console.log(`[回复 ${who}] ${out.replace(/\n/g, ' ').slice(0, 80)}`);
+              reply(ws, evt, out);
+            }
+          })
+          .catch((e) => {
+            console.error('[bot] 处理消息出错:', e);
+            try {
+              reply(ws, evt, `⚠️ 出错了：${e.message}`);
+            } catch {}
+          })
+      );
     }
   });
 

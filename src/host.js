@@ -3,7 +3,7 @@
  */
 const config = require('./config');
 
-async function callDeepSeek(messages, { json = false, temperature = 0.3, timeoutMs = 45000 } = {}) {
+async function callDeepSeek(messages, { json = false, temperature = 0.3, timeoutMs = 30000 } = {}) {
   if (!config.deepseekApiKey) {
     throw new Error('未配置 DEEPSEEK_API_KEY（请复制 .env.example 为 .env 并填写）');
   }
