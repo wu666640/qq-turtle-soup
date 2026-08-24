@@ -305,7 +305,7 @@ async function doMessage(s, key, message) {
   const touched = (Array.isArray(r && r.touched) ? r.touched : [])
     .map((i) => parseInt(i, 10) - 1)
     .filter((i) => i >= 0 && i < s.keyPoints.length)
-    .slice(0, 2);
+    .slice(0, 3);
   const guide = (r && r.guide) || '';
   // 能回答但没问到破案关键 → 回答后补一句「不是重点」（仅对 是/不是；无关本身已说明不重要）
   const notKey =
@@ -321,16 +321,19 @@ async function doMessage(s, key, message) {
 
   if (s.remaining <= 0) return '⛔ 提问次数已用完！可「扶汤」、「复盘」，或发「揭晓」直接看汤底。';
   s.remaining -= 1;
+  const newly = touched.filter((i) => s.keyPoints[i] && s.keyPoints[i].state === 'untouched');
+  const already = touched.length - newly.length;
   touched.forEach((i) => {
     if (s.keyPoints[i]) s.keyPoints[i].state = 'touched';
   });
   s.questions.push({ n: s.questions.length + 1, q: message, a: verdict });
   appendRecord(
     key,
-    `Q${s.questions.length} ${message} → ${verdict}${touched.length ? `（触及+${touched.length}）` : ''}`
+    `Q${s.questions.length} ${message} → ${verdict}${newly.length ? `（新触及+${newly.length}）` : already ? '（已触及过）' : ''}`
   );
   let out = `→ ${verdict}`;
-  if (touched.length) out += `（触及关键点 +${touched.length}）`;
+  if (newly.length) out += `（触及关键点 +${newly.length}）`;
+  else if (already) out += `（这些点之前已触及过）`;
   out += `\n${statusLine(s)}`;
   if (notKey) out += `\n（顺带一提：这个不是破案关键，不影响还原度）`;
   out += recordBlock(s);
@@ -631,7 +634,17 @@ function connect() {
     }
     if (evt.post_type === 'message' && evt.message_type) {
       // 群聊 @ 过滤：配置开启时，群里没 @ 机器人就不理会（私聊不受影响）
-      if (config.groupRequireAt && evt.message_type === 'group' && !isAtBot(evt)) return;
+      const atHit = isAtBot(evt);
+      // 事件日志：诊断用（每条消息落盘，标注 @ 是否命中）
+      try {
+        const t = extractText(evt);
+        fs.appendFileSync(
+          path.join(RECORDS_DIR, 'events.log'),
+          `[${new Date().toLocaleString('zh-CN', { hour12: false })}] ${evt.message_type === 'group' ? `群${evt.group_id}` : `私聊${evt.user_id}`} 来自${evt.user_id} @=${atHit ? '命中' : '未命中'} 内容=${(t || '(仅@)').slice(0, 60)}\n`,
+          'utf-8'
+        );
+      } catch {}
+      if (config.groupRequireAt && evt.message_type === 'group' && !atHit) return;
       const qkey = evt.message_type === 'group' ? `g:${evt.group_id}` : `p:${evt.user_id}`;
       if (!chatQueues.has(qkey)) chatQueues.set(qkey, Promise.resolve());
       chatQueues.set(
