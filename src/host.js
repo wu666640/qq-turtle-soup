@@ -103,11 +103,14 @@ async function understand(bottom, surface, keyPoints, message) {
           `【汤面】\n${surface}\n\n【汤底】\n${bottom}\n\n【关键真相点】\n${kp}\n\n玩家消息：${message}\n\n` +
           '【如果是指令】识别种类并输出：{"type":"command","command":"hint|review|reveal|records|status|restart|help"}\n' +
           '  hint=要提示/扶汤；review=要复盘；reveal=要揭晓/看答案/放弃/不想玩了；records=要看提问记录；status=看还原度/进度；restart=重开/换一题；help=规则/帮助。\n' +
-          '【如果是问题】依据汤底判答并输出：{"type":"question","verdict":"是|不是|无关|模糊","touched":[关键点编号数组],"important":true|false,"guide":"仅模糊时填，10~25字引导玩家问具体"}\n' +
+          '【如果是问题】依据汤底判答并输出：{"type":"question","verdict":"是|不是|无关|模糊","touched":[该问题直接确认或否定的关键点编号，通常0~2个],"important":true|false,"guide":"仅模糊时填，10~25字引导玩家问具体"}\n' +
           '  是：与汤底一致或能推断出肯定答案。注意：玩家会用不同说法表达同一件事，语义相同就算「是」，不要因用词不同判「不是」。\n' +
           '  不是：与汤底矛盾或能推断出否定答案。\n' +
           '  无关：汤底完全没提及且与谜题无关（极少用）。\n' +
           '  模糊：指代不清或覆盖范围太大（如「这个对吗」「到底发生了什么」）。\n' +
+          '  指代：问题里的「他/她/它/那个人」等代词，即使汤面里看起来有常用指向，只要汤底中多个角色的答案会不同，就必须判「模糊」，并在引导里请玩家点名确认（如：你说的「他」是指主角还是哥哥？）。宁可让玩家把话说清楚，也不要自行假设指代后给出可能误导的答案。\n' +
+          '  指代示例：汤底里主角活着、哥哥被杀了，玩家问「他是被杀的么？」——答案因人而异，判模糊，引导「你说的『他』是指主角还是哥哥？」；玩家改问「哥哥是被杀的么？」则正常判「是」。\n' +
+          '  touched：只有问题直接确认或否定了某个关键点的具体内容时才列入（通常 0~2 个）。宽泛问题（如「有人死吗」「然后呢」）即使答案明确，也只列它直接涉及的那一两个点，不要把全部关键点都标为触及。\n' +
           '  important：该问题是否问到核心真相（关键点）。true=问到了重点；false=虽然能回答，但与破案无关紧要。\n' +
           '不确定时优先按问题处理；只有消息明显是在请求某个操作时才判为指令。',
       },
@@ -125,7 +128,8 @@ async function judgeQuestion(bottom, surface, keyPoints, question) {
       verdict: r.verdict || '无关',
       touched: (Array.isArray(r.touched) ? r.touched : [])
         .map((i) => parseInt(i, 10) - 1)
-        .filter((i) => i >= 0 && i < keyPoints.length),
+        .filter((i) => i >= 0 && i < keyPoints.length)
+        .slice(0, 2),
       guide: r.guide || '',
       important: r.important !== false,
     };

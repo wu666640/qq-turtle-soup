@@ -275,7 +275,8 @@ async function doMessage(s, key, message) {
   const verdict = (r && r.verdict) || '无关';
   const touched = (Array.isArray(r && r.touched) ? r.touched : [])
     .map((i) => parseInt(i, 10) - 1)
-    .filter((i) => i >= 0 && i < s.keyPoints.length);
+    .filter((i) => i >= 0 && i < s.keyPoints.length)
+    .slice(0, 2);
   const guide = (r && r.guide) || '';
   // 能回答但没问到破案关键 → 回答后补一句「不是重点」（仅对 是/不是；无关本身已说明不重要）
   const notKey =
