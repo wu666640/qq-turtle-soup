@@ -1,0 +1,24 @@
+# ===== 隐私与密钥（绝不提交） =====
+.env
+
+# ===== 运行时数据（本机专用） =====
+records/
+data/
+cache/
+setup/
+*.db
+*.db-shm
+*.db-wal
+*.bak
+*.log
+
+# ===== 本机专用脚本与清单（含个人路径/账号信息） =====
+CHECKLIST.md
+一键启动.bat
+start-napcat.bat
+清理桌面残留.bat
+
+# ===== 依赖与构建 =====
+node_modules/
+dist/
+build/
