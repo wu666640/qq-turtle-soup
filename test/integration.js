@@ -22,8 +22,8 @@ const savedBackup = fs.existsSync(savedFile) ? fs.readFileSync(savedFile, 'utf-8
 // —— 2. Mock DeepSeek 服务器（按提示词内容返回不同结果）——
 let judgeCalls = 0;
 const JUDGE_ANSWERS = [
-  { verdict: '是', touched: [1] },
-  { verdict: '不是', touched: [2] },
+  { verdict: '是', touched: ['他天生失明'] },
+  { verdict: '不是', touched: ['嫂子雇人把他扔进山里'] },
 ];
 
 const server = http.createServer((req, res) => {

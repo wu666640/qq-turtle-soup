@@ -302,9 +302,7 @@ async function doMessage(s, key, message) {
 
   // —— 问题 ——
   const verdict = (r && r.verdict) || '无关';
-  const touchedRaw = (Array.isArray(r && r.touched) ? r.touched : [])
-    .map((i) => parseInt(i, 10) - 1)
-    .filter((i) => i >= 0 && i < s.keyPoints.length);
+  const touchedRaw = host.resolveTouched(r && r.touched, s.keyPoints.map((p) => p.t));
   // 非关键问题 / 元问题（清汤红汤）一律不点亮关键点
   const metaVerdict = verdict === '红汤' || verdict === '清汤';
   const touched = metaVerdict || (r && r.important === false) ? [] : touchedRaw.slice(0, 3);

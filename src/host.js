@@ -141,7 +141,7 @@ async function understand(bottom, surface, keyPoints, message, analysis) {
           `【汤面】\n${surface}\n\n【汤底】\n${bottom}\n\n【关键真相点】\n${kp}\n${notes}\n\n玩家消息：${message}\n\n` +
           '【如果是指令】识别种类并输出：{"type":"command","command":"hint|review|reveal|records|status|restart|help"}\n' +
           '  hint=要提示/扶汤；review=要复盘；reveal=要揭晓/看答案/放弃/不想玩了；records=要看提问记录；status=看还原度/进度；restart=重开/换一题；help=规则/帮助。\n' +
-          '【如果是问题】依据汤底判答并输出：{"type":"question","verdict":"是|不是|无关|模糊|红汤|清汤","touched":[该问题直接确认或否定的关键点编号，通常0~2个],"important":true|false,"guide":"仅模糊时填，10~25字引导玩家问具体"}\n' +
+          '【如果是问题】依据汤底判答并输出：{"type":"question","verdict":"是|不是|无关|模糊|红汤|清汤","touched":[所触及关键点的原文（从上面【关键真相点】列表原样复制，通常1~2条；没有则为[]）],"important":true|false,"guide":"仅模糊时填，10~25字引导玩家问具体"}\n' +
           '  是：与汤底一致或能推断出肯定答案。注意：玩家会用不同说法表达同一件事，语义相同就算「是」，不要因用词不同判「不是」。\n' +
           '  不是：与汤底矛盾或能推断出否定答案。\n' +
           '  无关：问题内容与故事（汤面/汤底）完全无关、且无法从故事推断（如问天气、常识、故事外的人或物）——这种情况必须答「无关」；只要问题与故事里的人/事/物相关（哪怕不是关键点），就正常答是/不是，并在必要时标注非关键。\n' +
@@ -150,7 +150,7 @@ async function understand(bottom, surface, keyPoints, message, analysis) {
           '  角色指代：问题里提到的角色名或称谓（如「上帝」「经纪人」「司机」「哥哥」「嫂子」）都指汤面/汤底里对应的那个角色，不要当作抽象概念（如把「上帝」当成宗教概念而不是故事里的角色），也不要另指他人。\n' +
           '  若汤底把某角色称作「上帝/天使」等，按该角色在汤底中的真实身份作答：汤底未明确说他是假扮的，就视为真实超自然存在——「上帝是人扮的吗」应答「不是」。\n' +
           '  指代示例：汤底里主角活着、哥哥被杀了，玩家问「他是被杀的么？」——答案因人而异，判模糊，引导「你说的『他』是指主角还是哥哥？」；玩家改问「哥哥是被杀的么？」则正常判「是」。\n' +
-          '  touched：问题确认或否定了哪个关键点的具体内容，就把哪个点列入（通常 1~2 个；是/不是的问题若直接对应某个关键点就一定要列入，不要留空）。宽泛问题（如「有人死吗」「然后呢」）只列它直接涉及的点，不要把全部关键点都标为触及（最多 3 个）。\n' +
+          '  touched：问题确认或否定了哪个关键点，就把那条关键点的**原文**（从【关键真相点】列表原样复制，一字不改）列入（通常 1~2 条；是/不是的问题若直接对应某个关键点就一定要列入，不要留空）。宽泛问题（如「有人死吗」「然后呢」）只列它直接涉及的点，不要把全部点都列入（最多 3 条）。\n' +
           '  海龟汤术语：玩家问「清汤/红汤」是在问汤底是否涉及死亡或血腥——红汤=有死亡或见血，清汤=没有。只要问题涉及清汤/红汤，判定就输出汤底实际的类型「红汤」或「清汤」，不要跟着问题里的词回答。特别注意：否定问法也是在问实际类型——「是清汤吗」=「没有死亡吗」，若汤底有死亡，答案仍是「红汤」；「是红汤吗」若汤底无死亡，答案仍是「清汤」。\n' +
           '  玩家问「本格/变格」是在问谜题风格，按以下规则回答是/不是，不要判「无关」：只要汤底包含以下任一元素就判「变格」——超自然/灵异/鬼神、真实存在的上帝/天使等超自然存在（不限于人冒充神）、人格分裂或精神异常、变态犯罪、弑亲等伦理禁忌、身份错位或重大反转；只有所有情节都能用常理解释的才算「本格」。\n' +
           '  important：该问题是否问到核心真相（关键点）。true=问到了重点；false=虽然能回答，但与破案无关紧要。\n' +
@@ -162,13 +162,22 @@ async function understand(bottom, surface, keyPoints, message, analysis) {
   return safeParseJSON(content);
 }
 
+/** 把模型返回的「关键点原文」列表解析为关键点下标（按文本匹配，避免编号指错） */
+function resolveTouched(touchedTexts, keyPoints) {
+  const idx = [];
+  for (const t of Array.isArray(touchedTexts) ? touchedTexts : []) {
+    if (typeof t !== 'string' || !t.trim()) continue;
+    const i = keyPoints.findIndex((k) => t.includes(k) || k.includes(t));
+    if (i >= 0 && !idx.includes(i)) idx.push(i);
+  }
+  return idx;
+}
+
 /** 提问判答（保持旧接口）：仅处理问题型消息 */
 async function judgeQuestion(bottom, surface, keyPoints, question, analysis) {
   const r = await understand(bottom, surface, keyPoints, question, analysis);
   if (r && r.type === 'question') {
-    const touchedRaw = (Array.isArray(r.touched) ? r.touched : [])
-      .map((i) => parseInt(i, 10) - 1)
-      .filter((i) => i >= 0 && i < keyPoints.length);
+    const touchedRaw = resolveTouched(r.touched, keyPoints);
     const verdict = r.verdict || '无关';
     const metaVerdict = verdict === '红汤' || verdict === '清汤';
     const touched = metaVerdict || r.important === false ? [] : touchedRaw.slice(0, 3);
@@ -202,4 +211,4 @@ async function reviewGuess(bottom, keyPoints, guess) {
   return safeParseJSON(content);
 }
 
-module.exports = { extractKeyPoints, analyzeCase, judgeQuestion, understand, generateHint, reviewGuess };
+module.exports = { extractKeyPoints, analyzeCase, judgeQuestion, understand, resolveTouched, generateHint, reviewGuess };
