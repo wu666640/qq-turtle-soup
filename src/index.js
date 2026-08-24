@@ -206,14 +206,25 @@ async function startGame(s, key, surface, bottom, title = '', ownerId = '') {
   s.hints = [];
   s.remaining = config.maxQuestions;
   s.keyPoints = [];
+  let difficulty = 3;
   try {
     const points = await host.extractKeyPoints(bottom);
     s.keyPoints = points.map((t) => ({ t, state: 'untouched' }));
+    difficulty = points.difficulty || 3;
   } catch (e) {
     console.error('[bot] 提取关键点失败:', e.message);
     s.keyPoints = [{ t: '（关键点提取失败，还原度按有效触及估算）', state: 'untouched' }];
   }
-  appendRecord(key, `【开局】${title || '自出题'}\n汤面：${surface}\n（汤底已封存，共 ${s.keyPoints.length} 个关键点）`);
+  // 提问次数 = 按关键点数 + 难度 + 篇幅动态计算（15~50）
+  const pts = s.keyPoints.length;
+  const totalLen = (surface + bottom).length;
+  const lenBonus = totalLen >= 1000 ? 6 : totalLen >= 500 ? 3 : 0;
+  const diffBonus = Math.round((difficulty - 1) * 2.5);
+  s.remaining = Math.max(15, Math.min(50, 12 + pts * 2 + diffBonus + lenBonus));
+  appendRecord(
+    key,
+    `【开局】${title || '自出题'}\n汤面：${surface}\n（汤底已封存，共 ${s.keyPoints.length} 个关键点，难度 ${difficulty} 星，提问 ${s.remaining} 次）`
+  );
   const head = title ? `📚 ${title}\n\n` : '';
   let savedNote = '';
   if (!title) {
@@ -234,7 +245,7 @@ async function startGame(s, key, surface, bottom, title = '', ownerId = '') {
     `🍲 开局成功！汤底已封存（${s.keyPoints.length} 个关键真相点，保密）。\n` +
     savedNote +
     `\n\n【汤面】\n${surface}\n\n` +
-    `开始提问吧，我只答 是/不是/无关（限 ${config.maxQuestions} 问）。发「规则」看全部指令；不想猜了随时发「揭晓」直接看汤底。`
+    `开始提问吧，我只答 是/不是/无关（限 ${s.remaining} 问 · 难度 ${difficulty} 星）。发「规则」看全部指令；不想猜了随时发「揭晓」直接看汤底。`
   );
 }
 

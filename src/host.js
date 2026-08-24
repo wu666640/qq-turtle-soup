@@ -48,7 +48,7 @@ function safeParseJSON(content) {
   return JSON.parse(c);
 }
 
-/** 开局：从汤底提取 4~8 个关键真相点（还原度标尺，绝不发给玩家） */
+/** 开局：从汤底提取 8~12 个关键真相点 + 难度评星（还原度标尺，绝不发给玩家） */
 async function extractKeyPoints(bottom) {
   const content = await callDeepSeek(
     [
@@ -57,7 +57,8 @@ async function extractKeyPoints(bottom) {
         role: 'user',
         content:
           '请根据汤底提取 8~12 个「关键真相点」：解开谜题必须知道的原子事实，每点一句话，按叙事先后排列。\n' +
-          '只输出 JSON：{"key_points":["...","..."]}\n\n汤底：\n' +
+          '同时评估谜题难度 difficulty（1~5 星：1=一眼看穿，3=中等，5=非常难，综合考虑情节复杂度、反转程度、信息隐藏深浅）。\n' +
+          '只输出 JSON：{"key_points":["...","..."],"difficulty":3}\n\n汤底：\n' +
           bottom,
       },
     ],
@@ -65,7 +66,10 @@ async function extractKeyPoints(bottom) {
   );
   const parsed = safeParseJSON(content);
   const list = parsed.key_points || parsed.keyPoints || [];
-  return list.filter((s) => typeof s === 'string' && s.trim()).slice(0, 12);
+  const points = list.filter((s) => typeof s === 'string' && s.trim()).slice(0, 12);
+  const d = parsed.difficulty;
+  points.difficulty = Number.isInteger(d) && d >= 1 && d <= 5 ? d : 3;
+  return points;
 }
 
 /** 扶汤：针对下一个未触及关键点生成一句提示 */
